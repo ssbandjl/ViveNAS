@@ -1,0 +1,10 @@
+标准的文件语义接口:
+include/vn_vivenas.h
+vn_lookup_inode_no
+
+写调用栈:
+size_t vn_write
+void* buf = malloc
+Transaction* tx = ctx->db->BeginTransaction(ctx->data_opt)
+
+

@@ -91,8 +91,8 @@ struct vn_extent_head {
 	int8_t flags;
 	int8_t pad0;
 	union {
-		uint16_t data_bmp; //extentµ±ÖĞÓĞĞ§µÄÊı¾İ²¿·Ö¡£bmpÎª0µÄ²¿·ÖÔÚextentÊı¾İÖĞ²¢Ã»ÓĞ±»´æ´¢
-		uint16_t merge_off;  //Ò»´ÎĞ´Èë²Ù×÷ÔÚextentÄÚ²¿µÄoffset
+		uint16_t data_bmp; //extentå½“ä¸­æœ‰æ•ˆçš„æ•°æ®éƒ¨åˆ†ã€‚bmpä¸º0çš„éƒ¨åˆ†åœ¨extentæ•°æ®ä¸­å¹¶æ²¡æœ‰è¢«å­˜å‚¨
+		uint16_t merge_off;  //ä¸€æ¬¡å†™å…¥æ“ä½œåœ¨extentå†…éƒ¨çš„offset
 	};
 	char pad1[12];
 }; //total 16 Byte
