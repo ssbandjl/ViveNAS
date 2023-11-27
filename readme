@@ -1,3 +1,5 @@
+文件系统参考链接: https://blog.csdn.net/winux/article/details/130415715
+
 标准的文件语义接口:
 include/vn_vivenas.h
 vn_lookup_inode_no
@@ -6,5 +8,135 @@ vn_lookup_inode_no
 size_t vn_write
 void* buf = malloc
 Transaction* tx = ctx->db->BeginTransaction(ctx->data_opt)
+...
+if(segment_len != file->inode->i_extent_size) -> 如果不是满条带,则执行合并
+    s = tx->Merge
+else 满条带,执行PUT操作
+    s = tx->Put
+if (offset + len > file->inode->i_size) -> 如果文件长度也发生了改变，就更新长度。 否则会现在lazy 模式更新元数据，也就是上面的修改时间不会每次更新
+    _vn_persist_inode
+s = tx->Commit()
+    
+
+
+
+nfs:
+创建符号链接:
+static fsal_status_t fvn_symlink
+fvn_create_obj
+    vn_create_file
+        Transaction* tx = ctx->db->BeginTransaction(ctx->meta_opt)
+        Cleaner _c
+        _c.push_back([tx]() {tx->Rollback(); })
+        tx->GetForUpdate
+        tx->Put
+        _vn_persist_inode
+        tx->Commit
+    fsalstat
+vn_open_file_by_inode
+vn_write
+vn_close_file
+
+
+
+
+文件上下文:
+struct ViveFsContext {
+	ViveFsContext();
+	~ViveFsContext();
+	std::string db_path;
+	ROCKSDB_NAMESPACE::TransactionDB* db;
+	ROCKSDB_NAMESPACE::ColumnFamilyHandle* default_cf;
+	ROCKSDB_NAMESPACE::ColumnFamilyHandle* meta_cf;
+	ROCKSDB_NAMESPACE::ColumnFamilyHandle* data_cf;
+
+	ROCKSDB_NAMESPACE::WriteOptions meta_opt;
+	ROCKSDB_NAMESPACE::WriteOptions data_opt;
+	ROCKSDB_NAMESPACE::ReadOptions read_opt;
+
+	struct ViveInode root_inode;
+	std::unique_ptr<ViveFile> root_file;
+
+	int64_t inode_seed;
+	int lazy_time; //1: update time lazy, i.e. option 'lazytime' is specified on mount
+	               //1 by default in ViveNAS
+	int relatime;  //1 if 'relatime' is specified on mount
+	int64_t generate_inode_no();
+};
+
+VIVE_NAS驱动/模块:
+nfs-ganesha/src/FSAL/FSAL_VIVENAS/vn_fsal_module.c
+MODULE_INIT void init(void) -> 动态打开并注册模块(dlopen), 初始化文件系统抽象层, 
+register_fsal
+fvn_handle_ops_init
+    操作表初始化
+enable_flush_on_exit
+
+
+操作表初始化
+void fvn_handle_ops_init(struct fsal_obj_ops *ops)
+{
+	fsal_default_obj_ops_init(ops);
+
+	ops->get_ref = fvn_get_ref,
+	ops->put_ref = fvn_put_ref,
+	ops->merge = fvn_merge,
+	ops->release = fvn_release;
+	ops->lookup = fvn_lookup;
+	ops->readdir = fvn_readdir;
+	ops->mkdir = fvn_mkdir;
+	ops->mknode = fvn_mknode;
+	ops->symlink = fvn_symlink;
+	ops->readlink = fvn_readlink;
+	ops->getattrs = fvn_getattrs;
+	ops->setattr2 = fvn_setattr2;
+	ops->link = fvn_link;
+	ops->rename = fvn_rename;
+	ops->unlink = fvn_unlink;
+	ops->close = fvn_close;
+	ops->open2 = fvn_open2;
+	ops->reopen2 = fvn_reopen2;
+	ops->read2 = fvn_read2;
+	ops->write2 = fvn_write2;
+	ops->commit2 = fvn_commit2;
+	ops->lock_op2 = fvn_lock_op2;
+	ops->close2 = fvn_close2;
+	ops->handle_to_wire = fvn_handle_to_wire;
+	ops->handle_to_key = fvn_handle_to_key;
+}
+
+
+格式化字符串:
+const std::string format_string(const char * format, ...)
+{
+	static __thread char buffer[2048];
+	va_list args;
+	va_start(args, format);
+	int len = vsnprintf(buffer, sizeof(buffer), format, args);
+	va_end(args);
+	if (len < (int)sizeof buffer)
+		// we fit in the buffer
+		return{ buffer, (size_t)len };
+	else
+		return{ buffer };
+}
+
+
+
+清理函数:
+class Cleaner {
+	std::vector<std::function<void(void)> > clean_func;
+public:
+	void push_back(std::function<void(void)> f) noexcept {
+		clean_func.push_back(f);
+	}
+	void cancel_all() noexcept {
+		clean_func.clear();
+	}
+	~Cleaner() {
+		for (auto i = clean_func.rbegin(); i != clean_func.rend(); ++i)
+			(*i)();
+	}
+};
 
 
